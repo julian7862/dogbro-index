@@ -1,167 +1,72 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+// -----------------------------------------------------------
+// WebSocket Hub - 純粹的 Socket.IO 事件中繼伺服器
+// -----------------------------------------------------------
+const express = require("express");
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
+const PORT = process.env.PORT || 3001;
+
+/* =========================================================
+ * 1. JSON 解析中介層
+ * ======================================================= */
+app.use(express.json());
+
+/* =========================================================
+ * 2. 健康檢查端點
+ * ======================================================= */
+app.get("/healthz", (_, res) => {
+  res.json({
+    status: "ok",
+    service: "websocket-hub",
+    timestamp: new Date().toISOString()
+  });
+});
+
+/* =========================================================
+ * 3. Socket.IO：純粹的事件中繼
+ * ======================================================= */
+const http = require("http").createServer(app);
+const io = require("socket.io")(http, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
   }
 });
 
-const PORT = process.env.PORT || 3001;
-let pyProc = null;
+io.on("connection", (socket) => {
+  console.log(`[Socket] 客戶端已連線：${socket.id}`);
 
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    pythonRunning: pyProc !== null,
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Socket.io relay logic - broadcast all events
-io.on('connection', (socket) => {
-  console.log(`[Socket] Client connected: ${socket.id}`);
-
-  // Relay all events to all other clients
+  /* 轉送所有事件（排除發送者自己） */
   socket.onAny((event, ...args) => {
-    console.log(`[Relay] ${event}:`, args);
+    console.log(`[中繼] ${event}:`, args);
     socket.broadcast.emit(event, ...args);
   });
 
-  socket.on('disconnect', () => {
-    console.log(`[Socket] Client disconnected: ${socket.id}`);
+  socket.on("disconnect", () => {
+    console.log(`[Socket] 客戶端已斷線：${socket.id}`);
   });
 });
 
-/**
- * Start Python process with hot restart support
- */
-function startPython() {
-  // Kill existing process if running
-  if (pyProc) {
-    console.log('[Python] Stopping existing Python process...');
-    pyProc.kill();
-    pyProc = null;
-  }
-
-  const pythonPath = path.resolve(__dirname, '../main.py');
-  const pythonBin = path.resolve(__dirname, '../venv/bin/python');
-
-  console.log(`[Python] Starting Python process: ${pythonPath}`);
-  console.log(`[Python] Using Python binary: ${pythonBin}`);
-
-  pyProc = spawn(pythonBin, [pythonPath], {
-    env: { ...process.env },
-    cwd: path.resolve(__dirname, '..')
-  });
-
-  pyProc.stdout.on('data', (data) => {
-    console.log(`[Python stdout] ${data.toString().trim()}`);
-  });
-
-  pyProc.stderr.on('data', (data) => {
-    console.error(`[Python stderr] ${data.toString().trim()}`);
-  });
-
-  pyProc.on('close', (code) => {
-    console.log(`[Python] Process exited with code ${code}`);
-    pyProc = null;
-  });
-
-  pyProc.on('error', (err) => {
-    console.error(`[Python] Failed to start:`, err);
-    pyProc = null;
-  });
-
-  return pyProc;
-}
-
-/**
- * API endpoint to set Shioaji credentials and restart Python
- */
-app.post('/set-sj-key', async (req, res) => {
-  try {
-    const { apiKey, secretKey, caCertPath, caPassword } = req.body;
-
-    if (!apiKey || !secretKey || !caCertPath || !caPassword) {
-      return res.status(400).json({
-        error: 'Missing required fields: apiKey, secretKey, caCertPath, caPassword'
-      });
-    }
-
-    // Write to /tmp/.env
-    const envContent = `API_KEY=${apiKey}
-SECRET_KEY=${secretKey}
-CA_CERT_PATH=${caCertPath}
-CA_PASSWORD=${caPassword}
-`;
-
-    fs.writeFileSync('/tmp/.env', envContent, 'utf8');
-    console.log('[Config] Credentials written to /tmp/.env');
-
-    // Restart Python process
-    startPython();
-
-    res.json({
-      success: true,
-      message: 'Credentials updated and Python process restarted'
-    });
-  } catch (error) {
-    console.error('[Config] Error:', error);
-    res.status(500).json({
-      error: 'Failed to update credentials',
-      details: error.message
-    });
-  }
+/* =========================================================
+ * 4. 伺服器啟動
+ * ======================================================= */
+http.listen(PORT, () => {
+  console.log("=".repeat(60));
+  console.log(`[WebSocket Hub] 運行於 http://0.0.0.0:${PORT}`);
+  console.log(`[WebSocket Hub] Socket.IO 中繼已啟用`);
+  console.log("=".repeat(60));
 });
 
-/**
- * Manual Python restart endpoint
- */
-app.post('/restart-python', (req, res) => {
-  try {
-    startPython();
-    res.json({
-      success: true,
-      message: 'Python process restarted'
-    });
-  } catch (error) {
-    res.status(500).json({
-      error: 'Failed to restart Python',
-      details: error.message
-    });
-  }
-});
-
-// Start server
-server.listen(PORT, () => {
-  console.log(`[Gateway] Server running on http://localhost:${PORT}`);
-  console.log(`[Gateway] Socket.io relay active`);
-
-  // Auto-start Python on server startup
-  startPython();
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('[Gateway] SIGTERM received, shutting down...');
-  if (pyProc) {
-    pyProc.kill();
-  }
-  server.close(() => {
-    console.log('[Gateway] Server closed');
+/* =========================================================
+ * 5. 優雅關閉處理
+ * ======================================================= */
+const shutdown = (signal) => {
+  console.log(`\n[WebSocket Hub] 收到 ${signal}，正在關閉...`);
+  http.close(() => {
+    console.log("[WebSocket Hub] 伺服器已關閉");
     process.exit(0);
   });
-});
+};
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

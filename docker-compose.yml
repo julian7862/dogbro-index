@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # WebSocket Hub - 純粹的事件中繼伺服器
+  socket-hub:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: socket-hub
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
+    restart: unless-stopped
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/healthz', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); })"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # Python 報價服務 - Shioaji 串流資料
+  python-market-data:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: python-market-data
+    depends_on:
+      socket-hub:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - GATEWAY_URL=http://socket-hub:3001
+      - TZ=Asia/Taipei
+      - PYTHONUNBUFFERED=1
+    restart: always
+    networks:
+      - trading-network
+    volumes:
+      # 如果需要掛載 CA 憑證，可以取消註解下面這行
+      # - ./certs:/app/certs:ro
+
+networks:
+  trading-network:
+    driver: bridge

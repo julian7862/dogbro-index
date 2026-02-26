@@ -4,6 +4,7 @@ This module provides factory functions for creating application components,
 following the Factory Pattern and Dependency Inversion Principle.
 """
 
+import os
 from src.utils.config import config
 from src.gateway.gateway_client import GatewayClient, GatewayConfig
 from src.trading.shioaji_client import ShioajiClient, ShioajiConfig
@@ -19,18 +20,22 @@ class AppFactory:
 
     @staticmethod
     def create_gateway_client(
-        url: str = 'http://localhost:3001',
+        url: str = None,
         reconnection: bool = True
     ) -> GatewayClient:
         """Create and configure Gateway client.
 
         Args:
-            url: Gateway server URL
+            url: Gateway server URL (defaults to GATEWAY_URL env var or localhost)
             reconnection: Enable auto-reconnection
 
         Returns:
             Configured GatewayClient instance
         """
+        # 優先使用傳入的 URL，其次使用環境變數，最後使用 localhost
+        if url is None:
+            url = os.getenv('GATEWAY_URL', 'http://localhost:3001')
+
         gateway_config = GatewayConfig(
             url=url,
             reconnection=reconnection
@@ -60,14 +65,14 @@ class AppFactory:
 
     @staticmethod
     def create_trading_service(
-        gateway_url: str = 'http://localhost:3001',
+        gateway_url: str = None,
         simulation: bool = True,
         heartbeat_interval: int = 10
     ) -> TradingService:
         """Create and configure Trading service with all dependencies.
 
         Args:
-            gateway_url: Gateway server URL
+            gateway_url: Gateway server URL (defaults to GATEWAY_URL env var)
             simulation: Enable Shioaji simulation mode
             heartbeat_interval: Heartbeat interval in seconds
 
@@ -86,14 +91,14 @@ class AppFactory:
 
 # Convenience function for common use case
 def create_app(
-    gateway_url: str = 'http://localhost:3001',
+    gateway_url: str = None,
     simulation: bool = True,
     heartbeat_interval: int = 10
 ) -> TradingService:
     """Convenience function to create application with default settings.
 
     Args:
-        gateway_url: Gateway server URL
+        gateway_url: Gateway server URL (defaults to GATEWAY_URL env var or localhost)
         simulation: Enable Shioaji simulation mode
         heartbeat_interval: Heartbeat interval in seconds
 

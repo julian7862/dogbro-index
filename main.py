@@ -18,8 +18,8 @@ def main() -> None:
     print("=" * 60)
 
     # Create application using factory
+    # gateway_url will be read from GATEWAY_URL env var (default: http://localhost:3001)
     service = create_app(
-        gateway_url='http://localhost:3001',
         simulation=True,
         heartbeat_interval=10
     )

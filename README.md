@@ -1,11 +1,11 @@
-# Dogbro Index
+# Dogbro Index API
 
 A Python-based trading application using the Shioaji API for Taiwan financial markets, featuring implied volatility calculations and options trading capabilities.
 
 ## Repository Architecture
 
 ```
-dogbro-index/
+dogbro-index-api/
 ├── main.py                 # Application entry point
 ├── pyproject.toml          # Project metadata and dependencies
 ├── .env.example            # Environment variables template
@@ -39,8 +39,8 @@ dogbro-index/
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/julian7862/dogbro-index.git
-cd dogbro-index
+git clone https://github.com/julian7862/dogbro-index-api.git
+cd dogbro-index-api
 ```
 
 2. Create and activate virtual environment:

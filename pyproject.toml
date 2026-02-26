@@ -1,7 +1,7 @@
 [project]
-name = "sj-trading"
+name = "dogbro-index-api"
 version = "0.1.0"
-description = "Shioaji Trading"
+description = "Dogbro Index API - Market Data Streaming Service"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
